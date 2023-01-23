@@ -22,7 +22,7 @@ skimr::skim(adds_to_cart)
 session_counts <- session_counts %>%
   mutate(dim_date = as.Date(dim_date,'%m/%d/%y'))
 
-# Create a true monthly date column to ease filtering
+# Create a true monthly date column to ease filtering & any potential joins
 adds_to_cart <- adds_to_cart %>%
   mutate(month = as.Date(paste(dim_year,
                                stringr::str_pad(dim_month,width = 2,side = 'left',pad = '0'),
@@ -40,7 +40,7 @@ month_device_metrics <- session_counts %>%
   summarise(across(where(is.numeric),sum),.groups = 'drop') %>%
   mutate(ecr = transactions / sessions)
 
-# Month-over-month metrics (by device cateogry as above) for May/June 2013
+# Month-over-month metrics (by device category as above) for May/June 2013
 # including absolute & relative differences
 mom_metrics <- month_device_metrics %>%
   filter(month >= as.Date('2013-05-01')) %>%
