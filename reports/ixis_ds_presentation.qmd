@@ -1,0 +1,186 @@
+---
+title: "IXIS Data Science Challenge"
+author: "Joran Elias"
+format: beamer
+fontsize: 8pt
+---
+
+```{r}
+#| label: setup
+#| echo: false
+#| messages: false
+#| include: false
+library(tidyverse)
+library(janitor)
+library(skimr)
+library(lubridate)
+library(writexl)
+library(lme4)
+library(patchwork)
+
+theme_set(theme_bw(base_size = 18) + 
+            theme(legend.direction = 'horizontal',
+                  legend.position = 'bottom'))
+
+# Read data
+session_counts <- readr::read_csv(file = '../data/DataAnalyst_Ecom_data_sessionCounts.csv',
+                                  show_col_types = FALSE) %>%
+  janitor::clean_names()
+adds_to_cart <- readr::read_csv(file = '../data/DataAnalyst_Ecom_data_addsToCart.csv',
+                                show_col_types = FALSE) %>%
+  janitor::clean_names()
+
+# Ensure dim_date is a date
+session_counts <- session_counts %>%
+  mutate(dim_date = as.Date(dim_date,'%m/%d/%y'))
+
+# Create a true monthly date column to ease filtering
+adds_to_cart <- adds_to_cart %>%
+  mutate(month = as.Date(paste(dim_year,
+                               stringr::str_pad(dim_month,width = 2,side = 'left',pad = '0'),
+                               '01',sep = '-'))) %>%
+  relocate(month,.before = everything()) %>%
+  mutate(month_idx = as.integer(as.factor(month)))
+
+# Mobile & tablet is basically Safari vs everything else, desktop is more
+# diverse
+session_counts <- session_counts %>%
+  mutate(dim_browser_cat = case_when(
+    grepl('Safari',dim_browser) ~ 'Safari',
+    dim_device_category %in% c('mobile','tablet') & !grepl('Safari',dim_browser) ~ 'Other',
+    dim_browser %in% c('Chrome','Internet Explorer','Firefox') ~ dim_browser,
+    TRUE ~ 'Other'
+  ))
+
+# Month * Device aggregation with the metrics:
+# - Session
+# - Transactions
+# - QTY
+# - ECR (Transactions / Sessions)
+month_device_metrics <- session_counts %>%
+  mutate(month = lubridate::floor_date(dim_date,'month'),
+         month_idx = as.integer(as.factor(month))) %>%
+  group_by(month,month_idx,dim_device_category) %>%
+  summarise(across(where(is.numeric),sum),.groups = 'drop') %>%
+  mutate(ecr = transactions / sessions)
+```
+
+## Conversion Rates By Device Category
+```{r}
+#| include: false
+dev_m <- lmer(formula = ecr ~ month_idx + (1+month_idx|dim_device_category),
+              data = month_device_metrics,
+              REML = FALSE)
+
+dev_slopes <- coef(dev_m)[[1]]$month_idx * 100
+```
+:::: {.columns}
+
+::: {.column width="25%"}
+
+- Conversion rates are best on desktop devices, worst on mobile
+- Desktop & mobile conversion rates have trended gradually up (`r format(dev_slopes[1],digits = 2)` \& `r format(dev_slopes[2],digits = 2)` per month respectively)
+- Tablet conversion rate has trended gradually down (`r format(dev_slopes[3],digits = 2)` per month)
+
+:::
+
+::: {.column width="75%"}
+```{r}
+month_device_metrics %>%
+  mutate(dim_device_category = factor(dim_device_category,levels = c('desktop','tablet','mobile'))) %>%
+ggplot(data = .,
+       aes(x = month,y = ecr,color = dim_device_category)) + 
+  geom_line() + 
+  geom_smooth(formula = y~x,method = 'lm',se = FALSE,linetype = 'dashed') + 
+  scale_y_continuous(labels = scales::percent_format()) + 
+  scale_color_brewer(type = 'qual') +
+  labs(x = 'Month',y = 'ECR',color = 'Device Category')
+```
+:::
+
+::::
+
+## Conversion Rates - Desktop & Mobile
+```{r}
+#| include: false
+month_dev_brow_ecr_p <- session_counts %>%
+  mutate(month = lubridate::floor_date(dim_date,'month')) %>%
+  group_by(month,dim_device_category,dim_browser_cat) %>%
+  summarise(across(where(is.numeric),sum),.groups = 'drop') %>%
+  mutate(ecr = transactions / sessions) %>%
+  select(month,dim_device_category,dim_browser_cat,ecr)
+```
+
+:::: {.columns}
+::: {.column width="25%"}
+
+- Desktop conversion has risen overall, but the best converting browser category, Safari, has declined slightly
+- Mobile conversion rates are small, but strong growth on mobile Safari
+
+:::
+
+::: {.column width="75%"}
+
+```{r}
+#| warnings: false
+#| fig.height: 10
+p_mobile <- month_dev_brow_ecr_p %>% 
+  filter(dim_device_category == 'mobile') %>%
+  mutate(dim_browser_cat = factor(dim_browser_cat,levels = c('Safari','Other'))) %>%
+  ggplot(data = .,aes(x = month,y = ecr,color = dim_browser_cat)) +
+  facet_wrap(~dim_device_category) +
+  geom_line() + 
+  geom_smooth(formula = y~x,method = 'lm',se = FALSE,linetype = 'dashed') +
+  scale_y_continuous(labels = scales::percent_format()) + 
+  scale_color_brewer(type = 'qual') +
+  labs(x = 'Month',y = 'ECR',color = 'Browser Category')
+
+p_desktop <- month_dev_brow_ecr_p %>% 
+  filter(dim_device_category == 'desktop') %>%
+  ggplot(data = .,aes(x = month,y = ecr,color = dim_browser_cat)) +
+  facet_wrap(~dim_device_category) +
+  geom_line() + 
+  geom_smooth(formula = y~x,method = 'lm',se = FALSE,linetype = 'dashed') +
+  scale_y_continuous(labels = scales::percent_format()) + 
+  scale_color_brewer(type = 'qual') +
+  labs(x = 'Month',y = 'ECR',color = 'Browser Category') + 
+  guides(color = guide_legend(nrow = 2))
+
+p_desktop / p_mobile
+```
+:::
+::::
+
+## Conversion Rates - Tablet
+:::: {.columns}
+::: {.column width="25%"}
+
+- Apparent small decline in tablet conversion rates due to single large value in July 2012 on mobile Safari 
+- Without this potential outlier, tablet conversion would likely appear flat for the year
+
+:::
+
+::: {.column width="75%"}
+
+```{r}
+month_dev_brow_ecr_p %>% 
+  filter(dim_device_category == 'tablet') %>%
+  mutate(dim_browser_cat = factor(dim_browser_cat,levels = c('Safari','Other'))) %>%
+  ggplot(data = .,aes(x = month,y = ecr,color = dim_browser_cat)) +
+  geom_line() + 
+  geom_smooth(formula = y~x,method = 'lm',se = FALSE,linetype = 'dashed') +
+  scale_y_continuous(labels = scales::percent_format()) + 
+  scale_color_brewer(type = 'qual') +
+  labs(x = 'Month',y = 'ECR',color = 'Browser Category')
+```
+:::
+::::
+## Recommendations
+
+::: {.incremental}
+
+- Focus on mobile Safari as a high growth opportunity
+- Investigate improvements to iPad Safari experience
+- Investigate improvements to desktop Safari experience
+
+:::
