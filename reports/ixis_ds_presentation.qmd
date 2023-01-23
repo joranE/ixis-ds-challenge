@@ -39,8 +39,7 @@ adds_to_cart <- adds_to_cart %>%
   mutate(month = as.Date(paste(dim_year,
                                stringr::str_pad(dim_month,width = 2,side = 'left',pad = '0'),
                                '01',sep = '-'))) %>%
-  relocate(month,.before = everything()) %>%
-  mutate(month_idx = as.integer(as.factor(month)))
+  relocate(month,.before = everything()) 
 
 # Mobile & tablet is basically Safari vs everything else, desktop is more
 # diverse
@@ -57,6 +56,9 @@ session_counts <- session_counts %>%
 # - Transactions
 # - QTY
 # - ECR (Transactions / Sessions)
+# 
+# month_idx is for use in regression model to ensure sensible interpretation
+# of coef (i.e. each unit change is one month)
 month_device_metrics <- session_counts %>%
   mutate(month = lubridate::floor_date(dim_date,'month'),
          month_idx = as.integer(as.factor(month))) %>%
@@ -68,7 +70,9 @@ month_device_metrics <- session_counts %>%
 ## Conversion Rates By Device Category
 ```{r}
 #| include: false
-dev_m <- lmer(formula = ecr ~ month_idx + (1+month_idx|dim_device_category),
+
+# Simple varying slopes model to quantify trends for each category
+dev_m <- lme4::lmer(formula = ecr ~ month_idx + (1+month_idx|dim_device_category),
               data = month_device_metrics,
               REML = FALSE)
 
@@ -146,6 +150,7 @@ p_desktop <- month_dev_brow_ecr_p %>%
   labs(x = 'Month',y = 'ECR',color = 'Browser Category') + 
   guides(color = guide_legend(nrow = 2))
 
+# Combine plots vis patchwork
 p_desktop / p_mobile
 ```
 :::
