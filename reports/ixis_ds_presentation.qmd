@@ -119,7 +119,7 @@ month_dev_brow_ecr_p <- session_counts %>%
 ::: {.column width="25%"}
 
 - Desktop conversion has risen overall, but the best converting browser category, Safari, has declined slightly
-- Mobile conversion rates are small, but strong growth on mobile Safari
+- Mobile conversion rates are small, but exhibit strong growth on mobile Safari
 
 :::
 
@@ -128,6 +128,11 @@ month_dev_brow_ecr_p <- session_counts %>%
 ```{r}
 #| warnings: false
 #| fig.height: 10
+
+# For a consistent color palette between the two
+col_pal <- RColorBrewer::brewer.pal(n = 5,name = 'Set1')
+col_pal <- setNames(col_pal,c('Chrome','Safari','Internet Explorer','Firefox','Other'))
+
 p_mobile <- month_dev_brow_ecr_p %>% 
   filter(dim_device_category == 'mobile') %>%
   mutate(dim_browser_cat = factor(dim_browser_cat,levels = c('Safari','Other'))) %>%
@@ -136,7 +141,7 @@ p_mobile <- month_dev_brow_ecr_p %>%
   geom_line() + 
   geom_smooth(formula = y~x,method = 'lm',se = FALSE,linetype = 'dashed') +
   scale_y_continuous(labels = scales::percent_format()) + 
-  scale_color_brewer(type = 'qual') +
+  scale_color_manual(values = col_pal[c(2,5)]) +
   labs(x = 'Month',y = 'ECR',color = 'Browser Category')
 
 p_desktop <- month_dev_brow_ecr_p %>% 
@@ -146,7 +151,7 @@ p_desktop <- month_dev_brow_ecr_p %>%
   geom_line() + 
   geom_smooth(formula = y~x,method = 'lm',se = FALSE,linetype = 'dashed') +
   scale_y_continuous(labels = scales::percent_format()) + 
-  scale_color_brewer(type = 'qual') +
+  scale_color_manual(values = col_pal) +
   labs(x = 'Month',y = 'ECR',color = 'Browser Category') + 
   guides(color = guide_legend(nrow = 2))
 
@@ -175,17 +180,13 @@ month_dev_brow_ecr_p %>%
   geom_line() + 
   geom_smooth(formula = y~x,method = 'lm',se = FALSE,linetype = 'dashed') +
   scale_y_continuous(labels = scales::percent_format()) + 
-  scale_color_brewer(type = 'qual') +
+  scale_color_manual(values = col_pal[c(2,5)]) +
   labs(x = 'Month',y = 'ECR',color = 'Browser Category')
 ```
 :::
 ::::
 ## Recommendations
 
-::: {.incremental}
-
 - Focus on mobile Safari as a high growth opportunity
-- Investigate improvements to iPad Safari experience
-- Investigate improvements to desktop Safari experience
-
-:::
+- Investigate improvements to iPad (tablet) Safari experience, as conversion rates there have been flat or declining
+- Investigate improvements to desktop Safari experience, as conversion rates there have declined
